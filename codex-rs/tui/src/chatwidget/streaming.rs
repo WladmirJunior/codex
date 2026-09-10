@@ -51,7 +51,11 @@ impl ChatWidget {
             latest_summary_line(&self.reasoning_buffer).or(self.reasoning_header.take());
         if let Some(header) = self.reasoning_header.clone() {
             self.status_state.terminal_title_status_kind = TerminalTitleStatusKind::Thinking;
-            self.set_status_header(header);
+            self.set_status_header(if self.local_settings.tui.focus_mode {
+                "Working".into()
+            } else {
+                header
+            });
         } else if self.bottom_pane.is_task_running()
             || self.status_state.current_status.is_guardian_review()
         {
@@ -292,6 +296,11 @@ impl ChatWidget {
         let Some(header) = self.reasoning_header.as_deref() else {
             // No usable summary has arrived yet.
             return;
+        };
+        let header = if self.local_settings.tui.focus_mode {
+            "Working"
+        } else {
+            header
         };
 
         let status = &self.status_state.current_status;

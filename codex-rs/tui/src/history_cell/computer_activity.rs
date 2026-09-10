@@ -93,6 +93,16 @@ fn error_preview(call: &McpToolCallCell) -> Option<&str> {
 }
 
 impl HistoryCell for ComputerActivityCell {
+    fn focus_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        if self.is_active() {
+            return self.display_hyperlink_lines(width);
+        }
+        self.calls
+            .iter()
+            .flat_map(|call| call.focus_hyperlink_lines(width))
+            .collect()
+    }
+
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         if width == 0 {
             return Vec::new();

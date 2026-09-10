@@ -537,6 +537,7 @@ pub(crate) enum AppEvent {
     ResetTranscriptForThreadSwitch,
 
     /// Re-render the transcript using the selected scrollback rendering mode.
+    ToggleFocusMode,
     RawOutputModeChanged {
         enabled: bool,
     },

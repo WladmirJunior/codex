@@ -35,7 +35,7 @@ pub(crate) fn new_patch_event(
     }
 }
 
-pub(crate) fn new_patch_apply_failure(stderr: String) -> PlainHistoryCell {
+pub(crate) fn new_patch_apply_failure(stderr: String) -> impl HistoryCell {
     let mut lines: Vec<Line<'static>> = Vec::new();
 
     // Failure title
@@ -54,10 +54,15 @@ pub(crate) fn new_patch_apply_failure(stderr: String) -> PlainHistoryCell {
         lines.extend(output.lines);
     }
 
-    PlainHistoryCell { lines }
+    FocusToolResultCell {
+        full: PlainHistoryCell { lines },
+        tool: "apply_patch",
+        status: "failed",
+        artifact: None,
+    }
 }
 
-pub(crate) fn new_view_image_tool_call(path: LegacyAppPathString, cwd: &Path) -> PlainHistoryCell {
+pub(crate) fn new_view_image_tool_call(path: LegacyAppPathString, cwd: &Path) -> impl HistoryCell {
     let display_path = path
         .to_inferred_path_uri()
         .and_then(|path| path.to_abs_path().ok())
@@ -69,7 +74,12 @@ pub(crate) fn new_view_image_tool_call(path: LegacyAppPathString, cwd: &Path) ->
         vec!["  └ ".dim(), display_path.dim()].into(),
     ];
 
-    PlainHistoryCell { lines }
+    FocusToolResultCell {
+        artifact: lines.last().cloned(),
+        full: PlainHistoryCell { lines },
+        tool: "view_image",
+        status: "completed",
+    }
 }
 
 pub(crate) fn new_image_generation_call(
@@ -77,7 +87,7 @@ pub(crate) fn new_image_generation_call(
     status: &str,
     revised_prompt: Option<String>,
     saved_path: Option<AbsolutePathBuf>,
-) -> PlainHistoryCell {
+) -> impl HistoryCell {
     let detail = revised_prompt.unwrap_or(call_id);
     let heading = if status == "failed" {
         vec!["✗ ".red().bold(), "Image generation failed".bold()].into()
@@ -85,6 +95,7 @@ pub(crate) fn new_image_generation_call(
         vec!["• ".dim(), "Generated Image:".bold()].into()
     };
     let mut lines: Vec<Line<'static>> = vec![heading, vec!["  └ ".dim(), detail.dim()].into()];
+    let has_saved_path = saved_path.is_some();
     if let Some(saved_path) = saved_path {
         let saved_path = Url::from_file_path(saved_path.as_path())
             .map(|url| url.to_string())
@@ -92,5 +103,14 @@ pub(crate) fn new_image_generation_call(
         lines.push(vec!["  └ ".dim(), "Saved to: ".dim(), saved_path.into()].into());
     }
 
-    PlainHistoryCell { lines }
+    FocusToolResultCell {
+        artifact: has_saved_path.then(|| lines.last().cloned()).flatten(),
+        full: PlainHistoryCell { lines },
+        tool: "image_generation",
+        status: if status == "failed" {
+            "failed"
+        } else {
+            "completed"
+        },
+    }
 }

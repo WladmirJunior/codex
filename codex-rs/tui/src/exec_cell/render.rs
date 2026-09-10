@@ -184,6 +184,38 @@ fn activity_marker(start_time: Option<Instant>, animations_enabled: bool) -> Spa
 }
 
 impl HistoryCell for ExecCell {
+    fn focus_hyperlink_lines(&self, width: u16) -> Vec<crate::terminal_hyperlinks::HyperlinkLine> {
+        if self.is_active()
+            || self
+                .calls
+                .iter()
+                .any(|call| call.source == ExecCommandSource::UserShell)
+        {
+            return self.display_hyperlink_lines(width);
+        }
+        self.calls
+            .iter()
+            .flat_map(|call| {
+                let tool = match call.source {
+                    ExecCommandSource::Agent => "shell",
+                    ExecCommandSource::UserShell => "user shell",
+                    ExecCommandSource::UnifiedExecStartup => "exec_command",
+                    ExecCommandSource::UnifiedExecInteraction => "write_stdin",
+                };
+                let status = if self.interrupted_calls.contains(&call.call_id) {
+                    "interrupted".to_string()
+                } else {
+                    match call.output.as_ref().map(|output| output.exit_code) {
+                        Some(0) => "completed".to_string(),
+                        Some(code) => format!("failed (exit {code})"),
+                        None => "finished".to_string(),
+                    }
+                };
+                crate::history_cell::focus_tool_summary(tool, &status, width)
+            })
+            .collect()
+    }
+
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         if self.is_exploring_cell() {
             self.exploring_display_lines(width)

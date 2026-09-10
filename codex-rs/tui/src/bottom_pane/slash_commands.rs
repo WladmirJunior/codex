@@ -332,6 +332,7 @@ mod tests {
                 SlashCommand::Copy,
                 SlashCommand::Export,
                 SlashCommand::Raw,
+                SlashCommand::Focus,
                 SlashCommand::Diff,
                 SlashCommand::Mention,
                 SlashCommand::Status,

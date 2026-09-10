@@ -783,6 +783,10 @@ pub struct Tui {
     #[serde(default)]
     pub raw_output_mode: bool,
 
+    /// Hide reasoning and summarize completed tools in the chat view. Defaults to `false`.
+    #[serde(default)]
+    pub focus_mode: bool,
+
     /// Controls whether the TUI uses the terminal's alternate screen buffer.
     ///
     /// - `auto` (default): Use alternate screen.

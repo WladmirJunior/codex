@@ -357,6 +357,10 @@ impl ReasoningSummaryCell {
 }
 
 impl HistoryCell for ReasoningSummaryCell {
+    fn focus_hyperlink_lines(&self, _width: u16) -> Vec<HyperlinkLine> {
+        Vec::new()
+    }
+
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         if self.transcript_only {
             Vec::new()

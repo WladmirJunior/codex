@@ -1,0 +1,8 @@
+---
+source: tui/src/history_cell/focus_tests.rs
+expression: "snapshots.join(\"\\n\")"
+---
+80: • workspace.分析_arquivo_muito_longo: failed
+24: • workspace.分…: failed
+12: • w…: failed
+0:

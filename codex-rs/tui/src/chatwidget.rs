@@ -1650,6 +1650,8 @@ impl ChatWidget {
     pub(crate) fn history_render_mode(&self) -> HistoryRenderMode {
         if self.raw_output_mode {
             HistoryRenderMode::Raw
+        } else if self.local_settings.tui.focus_mode {
+            HistoryRenderMode::Focus
         } else {
             HistoryRenderMode::Rich
         }
@@ -1666,6 +1668,12 @@ impl ChatWidget {
             controller.set_render_mode(render_mode);
         }
         self.refresh_status_surfaces();
+    }
+
+    pub(crate) fn set_focus_mode(&mut self, enabled: bool) {
+        self.local_settings.tui.focus_mode = enabled;
+        self.set_raw_output_mode(self.raw_output_mode);
+        self.restore_reasoning_status_header();
     }
 
     pub(crate) fn raw_output_mode_notice(enabled: bool) -> &'static str {

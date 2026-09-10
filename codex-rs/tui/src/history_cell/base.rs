@@ -105,6 +105,20 @@ impl CompositeHistoryCell {
 }
 
 impl HistoryCell for CompositeHistoryCell {
+    fn focus_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        let mut out = Vec::new();
+        for part in &self.parts {
+            let lines = part.focus_hyperlink_lines(width);
+            if !lines.is_empty() {
+                if !out.is_empty() {
+                    out.push(HyperlinkLine::from(""));
+                }
+                out.extend(lines);
+            }
+        }
+        out
+    }
+
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         let mut out: Vec<Line<'static>> = Vec::new();
         let mut first = true;

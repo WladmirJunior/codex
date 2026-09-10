@@ -290,6 +290,25 @@ impl McpToolCallCell {
 }
 
 impl HistoryCell for McpToolCallCell {
+    fn focus_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        let status = match self.success() {
+            None => return self.display_hyperlink_lines(width),
+            Some(true) => "completed",
+            Some(false) if matches!(&self.result, Some(Err(error)) if error == "interrupted") => {
+                "interrupted"
+            }
+            Some(false) if matches!(&self.result, Some(Err(error)) if error == "user cancelled MCP tool call") => {
+                "cancelled"
+            }
+            Some(false) => "failed",
+        };
+        focus_tool_summary(
+            &format!("{}.{}", self.invocation.server, self.invocation.tool),
+            status,
+            width,
+        )
+    }
+
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         self.render_lines(width, McpToolCallRenderMode::Display)
     }

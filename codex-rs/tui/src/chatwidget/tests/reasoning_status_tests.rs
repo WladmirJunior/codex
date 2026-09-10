@@ -62,6 +62,31 @@ async fn reasoning_status_accepts_bold_text_with_a_plain_suffix() {
 }
 
 #[tokio::test]
+async fn focus_reasoning_status_is_reversible_without_losing_buffer() {
+    let (mut chat, _rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.on_task_started();
+    handle_agent_reasoning_started(&mut chat, "reasoning");
+    delta(&mut chat, "reasoning", "DETAILED_REASONING");
+    let before = chat.reasoning_buffer.clone();
+    chat.set_focus_mode(/*enabled*/ true);
+    assert_eq!(
+        chat.bottom_pane.status_widget().unwrap().header(),
+        "Working"
+    );
+    assert_eq!(chat.reasoning_buffer, before);
+    delta(&mut chat, "reasoning", "_CONTINUED");
+    assert_eq!(
+        chat.bottom_pane.status_widget().unwrap().header(),
+        "Working"
+    );
+    chat.set_focus_mode(/*enabled*/ false);
+    assert_eq!(
+        chat.bottom_pane.status_widget().unwrap().header(),
+        "DETAILED_REASONING_CONTINUED"
+    );
+}
+
+#[tokio::test]
 async fn reasoning_status_tracks_items_and_restores_after_tool_activity() {
     let (mut chat, _rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.on_task_started();

@@ -75,6 +75,7 @@ pub(crate) struct ExecCall {
 #[derive(Debug)]
 pub(crate) struct ExecCell {
     pub(crate) calls: Vec<ExecCall>,
+    pub(super) interrupted_calls: Vec<String>,
     animations_enabled: bool,
 }
 
@@ -82,6 +83,7 @@ impl ExecCell {
     pub(crate) fn new(call: ExecCall, animations_enabled: bool) -> Self {
         Self {
             calls: vec![call],
+            interrupted_calls: Vec::new(),
             animations_enabled,
         }
     }
@@ -147,6 +149,7 @@ impl ExecCell {
     pub(crate) fn mark_failed(&mut self) {
         for call in self.calls.iter_mut() {
             if call.duration.is_none() {
+                self.interrupted_calls.push(call.call_id.clone());
                 let elapsed = call
                     .start_time
                     .map(|st| st.elapsed())

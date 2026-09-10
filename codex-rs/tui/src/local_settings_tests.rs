@@ -17,6 +17,7 @@ show_tooltips = false
 show_server_version_notice = false
 auto_recap = false
 vim_mode_default = true
+focus_mode = true
 terminal_resize_reflow_max_rows = 0
 session_picker_view = "comfortable"
 [history]
@@ -48,6 +49,7 @@ fast_default_opt_out = true
             expected.show_server_version_notice = false;
             expected.auto_recap = false;
             expected.vim_mode_default = true;
+            expected.focus_mode = true;
             expected.terminal_resize_reflow_max_rows = Some(0);
             expected.session_picker_view = Some(SessionPickerViewMode::Comfortable);
         }

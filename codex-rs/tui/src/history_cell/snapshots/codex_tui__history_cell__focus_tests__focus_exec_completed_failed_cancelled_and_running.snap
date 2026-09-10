@@ -1,0 +1,7 @@
+---
+source: tui/src/history_cell/focus_tests.rs
+expression: "snapshots.join(\"\\n\")"
+---
+• exec_command: completed
+• exec_command: failed (exit 7)
+• exec_command: interrupted

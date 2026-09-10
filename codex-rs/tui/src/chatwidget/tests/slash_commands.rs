@@ -3749,6 +3749,20 @@ async fn raw_slash_command_toggles_and_accepts_on_off_args() {
 }
 
 #[tokio::test]
+async fn focus_slash_command_is_local_and_available_during_a_turn() {
+    let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.turn_lifecycle.agent_turn_running = true;
+    chat.dispatch_command(SlashCommand::Focus);
+    let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, AppEvent::ToggleFocusMode))
+    );
+    assert!(op_rx.try_recv().is_err());
+}
+
+#[tokio::test]
 async fn raw_slash_command_reports_usage_for_invalid_arg() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
 

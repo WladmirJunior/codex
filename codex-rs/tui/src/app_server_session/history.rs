@@ -309,6 +309,8 @@ fn rendered_history_rows(
     };
     let mode = if local_settings.tui.raw_output_mode {
         HistoryRenderMode::Raw
+    } else if local_settings.tui.focus_mode {
+        HistoryRenderMode::Focus
     } else {
         HistoryRenderMode::Rich
     };

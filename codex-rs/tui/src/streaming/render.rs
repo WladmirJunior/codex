@@ -70,7 +70,9 @@ impl StreamingRender {
         self.open_code_fence = None;
         self.has_inline_visualization_directive = contains_inline_visualization(source);
         self.lines = match (render_mode, inline_visualization_context) {
-            (HistoryRenderMode::Rich, None) if !self.has_inline_visualization_directive => {
+            (HistoryRenderMode::Rich | HistoryRenderMode::Focus, None)
+                if !self.has_inline_visualization_directive =>
+            {
                 let rendered =
                     render_streaming_markdown_agent_with_links_and_cwd(source, width, Some(cwd));
                 self.has_reference_link_definition = rendered.has_reference_link_definition;
@@ -205,12 +207,14 @@ pub(super) fn render_source(
     inline_visualization_context: Option<&InlineVisualizationContext>,
 ) -> Vec<HyperlinkLine> {
     match render_mode {
-        HistoryRenderMode::Rich => render_markdown_agent_with_links_cwd_and_visualizations(
-            source,
-            width,
-            Some(cwd),
-            inline_visualization_context,
-        ),
+        HistoryRenderMode::Rich | HistoryRenderMode::Focus => {
+            render_markdown_agent_with_links_cwd_and_visualizations(
+                source,
+                width,
+                Some(cwd),
+                inline_visualization_context,
+            )
+        }
         HistoryRenderMode::Raw => plain_hyperlink_lines(raw_lines_from_source(source)),
     }
 }

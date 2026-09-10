@@ -1,0 +1,5 @@
+---
+source: tui/src/app/tests/focus_mode_tests.rs
+expression: "focused.iter().map(|line|\nline.line.to_string()).collect::<Vec<_>>().join(\"\\n\")"
+---
+• fixture.inspect: interrupted

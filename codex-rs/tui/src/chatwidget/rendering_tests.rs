@@ -1,4 +1,5 @@
 use super::*;
+use crate::chatwidget::tests::helpers::normalize_snapshot_paths;
 use crate::chatwidget::tests::make_chatwidget_manual_with_sender;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
@@ -76,6 +77,51 @@ fn contains_text(buffer: &Buffer, text: &str) -> bool {
 }
 
 #[tokio::test]
+async fn focus_completed_group_in_active_slot_reflows_and_restores() {
+    let (mut widget, _sender, _events, _operations) = make_chatwidget_manual_with_sender().await;
+    let mut cell = crate::exec_cell::new_active_exec_command(
+        "fixture-call".into(),
+        vec!["cat".into(), "DETAILED_FILE".into()],
+        vec![codex_protocol::parse_command::ParsedCommand::Read {
+            cmd: "cat DETAILED_FILE".into(),
+            name: "DETAILED_FILE".into(),
+            path: "DETAILED_FILE".into(),
+        }],
+        ExecCommandSource::Agent,
+        /*interaction_input*/ None,
+        /*animations_enabled*/ false,
+    );
+    cell.complete_call(
+        "fixture-call",
+        crate::exec_cell::CommandOutput::new(/*exit_code*/ 0, "DETAILED_OUTPUT".into()),
+        std::time::Duration::ZERO,
+    );
+    assert!(!cell.should_flush());
+    widget.transcript.active_cell = Some(Box::new(cell));
+    let before = render_frame(&widget, /*width*/ 80);
+    widget.set_focus_mode(/*enabled*/ true);
+    let focused = render_frame(&widget, /*width*/ 80);
+    assert!(contains_text(&focused, "shell: completed"));
+    assert!(!contains_text(&focused, "DETAILED_FILE"));
+    assert!(focused.area.height < before.area.height);
+    widget.set_focus_mode(/*enabled*/ false);
+    assert_eq!(render_frame(&widget, /*width*/ 80), before);
+    let text = focused
+        .content
+        .chunks(80)
+        .map(|row| {
+            row.iter()
+                .map(ratatui::buffer::Cell::symbol)
+                .collect::<String>()
+                .trim_end()
+                .to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    insta::assert_snapshot!(normalize_snapshot_paths(text));
+}
+
+#[tokio::test]
 async fn external_writer_view_shows_notice_instead_of_composer() {
     let (mut widget, _sender, _events, _operations) = make_chatwidget_manual_with_sender().await;
     widget.show_external_writer_thread();
@@ -137,6 +183,7 @@ fn active_transcript_preserves_clipped_markdown_hyperlinks() {
     );
     let renderable = TranscriptAreaRenderable {
         child: &cell,
+        render_mode: HistoryRenderMode::Rich,
         top: 1,
         right: 2,
         persistent_layout: None,

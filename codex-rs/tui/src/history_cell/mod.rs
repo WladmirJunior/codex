@@ -105,6 +105,7 @@ const RAW_TOOL_OUTPUT_WIDTH: usize = 10_000;
 mod approvals;
 mod base;
 mod exec;
+mod focus;
 mod hook_cell;
 mod markdown_render_cache;
 mod mcp;
@@ -122,6 +123,8 @@ mod startup_warnings;
 pub(crate) use approvals::*;
 pub(crate) use base::*;
 pub(crate) use exec::*;
+pub(crate) use focus::FocusToolResultCell;
+pub(crate) use focus::focus_tool_summary;
 pub(crate) use hook_cell::HookCell;
 pub(crate) use hook_cell::new_active_hook_cell;
 pub(crate) use hook_cell::new_completed_hook_cell;
@@ -139,10 +142,15 @@ pub(crate) use startup_warnings::StartupWarningsCell;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+#[path = "focus_tests.rs"]
+mod focus_tests;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum HistoryRenderMode {
     Rich,
     Raw,
+    Focus,
 }
 
 pub(crate) fn raw_lines_from_source(source: &str) -> Vec<Line<'static>> {
@@ -196,10 +204,16 @@ pub(crate) trait HistoryCell: std::fmt::Debug + Send + Sync + Any {
         plain_hyperlink_lines(self.display_lines(width))
     }
 
+    /// Presentation-only projection; transcript and raw output retain the complete cell.
+    fn focus_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        self.display_hyperlink_lines(width)
+    }
+
     fn display_lines_for_mode(&self, width: u16, mode: HistoryRenderMode) -> Vec<Line<'static>> {
         match mode {
             HistoryRenderMode::Rich => visible_lines(self.display_hyperlink_lines(width)),
             HistoryRenderMode::Raw => self.raw_lines(),
+            HistoryRenderMode::Focus => visible_lines(self.focus_hyperlink_lines(width)),
         }
     }
 
@@ -211,6 +225,7 @@ pub(crate) trait HistoryCell: std::fmt::Debug + Send + Sync + Any {
         match mode {
             HistoryRenderMode::Rich => self.display_hyperlink_lines(width),
             HistoryRenderMode::Raw => plain_hyperlink_lines(self.raw_lines()),
+            HistoryRenderMode::Focus => self.focus_hyperlink_lines(width),
         }
     }
 

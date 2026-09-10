@@ -1,0 +1,8 @@
+---
+source: tui/src/history_cell/focus_tests.rs
+expression: "snapshots.join(\"\\n\")"
+---
+• fixture.inspect: failed
+• fixture.inspect: failed
+• fixture.inspect: interrupted
+• fixture.inspect: cancelled

@@ -187,7 +187,7 @@ pub(crate) fn thread_items_to_transcript_cells(
             }
             other => {
                 if let Some(cell) = fallback_transcript_cell(&other) {
-                    cells.push(Arc::new(cell));
+                    cells.push(cell.into());
                 }
             }
         }
@@ -195,7 +195,7 @@ pub(crate) fn thread_items_to_transcript_cells(
     cells
 }
 
-fn fallback_transcript_cell(item: &ThreadItem) -> Option<PlainHistoryCell> {
+fn fallback_transcript_cell(item: &ThreadItem) -> Option<Box<dyn HistoryCell>> {
     let lines = match item {
         ThreadItem::HookPrompt { fragments, .. } => fragments
             .iter()
@@ -309,5 +309,36 @@ fn fallback_transcript_cell(item: &ThreadItem) -> Option<PlainHistoryCell> {
         | ThreadItem::Reasoning { .. }
         | ThreadItem::Sleep(_) => return None,
     };
-    (!lines.is_empty()).then(|| PlainHistoryCell::new(lines))
+    if lines.is_empty() {
+        return None;
+    }
+    let full = PlainHistoryCell::new(lines);
+    if let ThreadItem::CommandExecution { source, status, .. } = item
+        && *source != codex_app_server_protocol::CommandExecutionSource::UserShell
+        && *status != codex_app_server_protocol::CommandExecutionStatus::InProgress
+    {
+        use codex_app_server_protocol::CommandExecutionSource as Source;
+        use codex_app_server_protocol::CommandExecutionStatus as Status;
+        return Some(Box::new(crate::history_cell::FocusToolResultCell {
+            full,
+            tool: match source {
+                Source::Agent => "shell",
+                Source::UserShell => "user shell",
+                Source::UnifiedExecStartup => "exec_command",
+                Source::UnifiedExecInteraction => "write_stdin",
+            },
+            status: match status {
+                Status::Completed => "completed",
+                Status::Failed => "failed",
+                Status::Declined => "declined",
+                Status::InProgress => "running",
+            },
+            artifact: None,
+        }));
+    }
+    Some(Box::new(full))
 }
+
+#[cfg(test)]
+#[path = "thread_transcript_focus_tests.rs"]
+mod focus_tests;

@@ -88,6 +88,14 @@ impl WebSearchCell {
 }
 
 impl HistoryCell for WebSearchCell {
+    fn focus_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        if self.completed {
+            focus_tool_summary("web_search", "completed", width)
+        } else {
+            self.display_hyperlink_lines(width)
+        }
+    }
+
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         let bullet = if self.completed {
             "•".dim()

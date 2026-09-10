@@ -518,6 +518,9 @@ impl ChatWidget {
             SlashCommand::Theme => {
                 self.open_theme_picker();
             }
+            SlashCommand::Focus => {
+                self.app_event_tx.send(AppEvent::ToggleFocusMode);
+            }
             SlashCommand::Pets => {
                 self.open_pets_picker();
             }
@@ -1179,6 +1182,7 @@ impl ChatWidget {
             | SlashCommand::Rollout
             | SlashCommand::Copy
             | SlashCommand::Raw
+            | SlashCommand::Focus
             | SlashCommand::Vim
             | SlashCommand::Diff
             | SlashCommand::App
