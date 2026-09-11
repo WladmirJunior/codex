@@ -12,6 +12,7 @@ use crate::motion::activity_indicator;
 use crate::render::highlight::highlight_bash_to_lines;
 use crate::render::line_utils::prefix_lines;
 use crate::render::line_utils::push_owned_lines;
+use crate::terminal_hyperlinks::plain_hyperlink_lines;
 use crate::ui_consts::TRANSCRIPT_HINT;
 use crate::wrapping::RtOptions;
 use crate::wrapping::adaptive_wrap_line;
@@ -209,13 +210,8 @@ impl HistoryCell for ExecCell {
                 } else {
                     match call.output.as_ref() {
                         Some(output) if output.exit_code == 0 => "completed".to_string(),
-                        Some(output) => {
-                            return crate::history_cell::focus_tool_failure_summary(
-                                tool,
-                                Some(output.exit_code),
-                                output.lines(),
-                                width,
-                            );
+                        Some(_) => {
+                            return plain_hyperlink_lines(exec_call_transcript_lines(call, width));
                         }
                         None => "finished".to_string(),
                     }
@@ -239,42 +235,7 @@ impl HistoryCell for ExecCell {
             if i > 0 {
                 lines.push("".into());
             }
-            let script = strip_bash_lc_and_escape(&call.command);
-            let highlighted_script = highlight_bash_to_lines(&script);
-            let cmd_display = adaptive_wrap_lines(
-                &highlighted_script,
-                RtOptions::new(width as usize)
-                    .initial_indent("$ ".magenta().into())
-                    .subsequent_indent("    ".into()),
-            );
-            lines.extend(cmd_display);
-
-            if let Some(output) = call.output.as_ref() {
-                if !call.is_unified_exec_interaction() {
-                    let wrap_width = width.max(1) as usize;
-                    let wrap_opts = RtOptions::new(wrap_width);
-                    for unwrapped in output
-                        .transcript_lines()
-                        .map(|line| ansi_escape_line(line.as_ref()))
-                    {
-                        let wrapped = adaptive_wrap_line(&unwrapped, wrap_opts.clone());
-                        push_owned_lines(&wrapped, &mut lines);
-                    }
-                }
-                if let Some(duration) = call.duration {
-                    let duration = format_duration(duration);
-                    let mut result: Line = if output.exit_code == 0 {
-                        Line::from("✓".green().bold())
-                    } else {
-                        Line::from(vec![
-                            "✗".red().bold(),
-                            format!(" ({})", output.exit_code).into(),
-                        ])
-                    };
-                    result.push_span(format!(" • {duration}").dim());
-                    lines.push(result);
-                }
-            }
+            lines.extend(exec_call_transcript_lines(call, width));
         }
         lines
     }
@@ -282,6 +243,43 @@ impl HistoryCell for ExecCell {
     fn raw_lines(&self) -> Vec<Line<'static>> {
         plain_lines(self.transcript_lines(u16::MAX))
     }
+}
+
+fn exec_call_transcript_lines(call: &ExecCall, width: u16) -> Vec<Line<'static>> {
+    let script = strip_bash_lc_and_escape(&call.command);
+    let highlighted_script = highlight_bash_to_lines(&script);
+    let mut lines = adaptive_wrap_lines(
+        &highlighted_script,
+        RtOptions::new(width as usize)
+            .initial_indent("$ ".magenta().into())
+            .subsequent_indent("    ".into()),
+    );
+    if let Some(output) = call.output.as_ref() {
+        if !call.is_unified_exec_interaction() || output.exit_code != 0 {
+            let wrap_opts = RtOptions::new(width.max(1) as usize);
+            for unwrapped in output
+                .transcript_lines()
+                .map(|line| ansi_escape_line(line.as_ref()))
+            {
+                let wrapped = adaptive_wrap_line(&unwrapped, wrap_opts.clone());
+                push_owned_lines(&wrapped, &mut lines);
+            }
+        }
+        if let Some(duration) = call.duration {
+            let duration = format_duration(duration);
+            let mut result: Line = if output.exit_code == 0 {
+                Line::from("✓".green().bold())
+            } else {
+                Line::from(vec![
+                    "✗".red().bold(),
+                    format!(" ({})", output.exit_code).into(),
+                ])
+            };
+            result.push_span(format!(" • {duration}").dim());
+            lines.push(result);
+        }
+    }
+    lines
 }
 
 impl ExecCell {

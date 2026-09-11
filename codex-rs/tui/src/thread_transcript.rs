@@ -356,19 +356,12 @@ fn fallback_transcript_cell(item: &ThreadItem) -> Option<Box<dyn HistoryCell>> {
             tool,
             status: "completed",
             artifact: None,
-            exit_code: None,
-            error_detail: None,
         }));
     }
-    if let ThreadItem::CommandExecution {
-        source,
-        status,
-        exit_code,
-        aggregated_output,
-        ..
-    } = item
+    if let ThreadItem::CommandExecution { source, status, .. } = item
         && *source != codex_app_server_protocol::CommandExecutionSource::UserShell
         && *status != codex_app_server_protocol::CommandExecutionStatus::InProgress
+        && *status != codex_app_server_protocol::CommandExecutionStatus::Failed
     {
         use codex_app_server_protocol::CommandExecutionSource as Source;
         use codex_app_server_protocol::CommandExecutionStatus as Status;
@@ -387,12 +380,6 @@ fn fallback_transcript_cell(item: &ThreadItem) -> Option<Box<dyn HistoryCell>> {
                 Status::InProgress => "running",
             },
             artifact: None,
-            exit_code: *exit_code,
-            error_detail: if *status == Status::Failed {
-                aggregated_output.clone()
-            } else {
-                None
-            },
         }));
     }
     Some(Box::new(full))

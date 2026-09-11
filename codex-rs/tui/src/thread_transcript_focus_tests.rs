@@ -117,12 +117,15 @@ fn focus_paginated_tool_activity_is_quiet_and_preserves_failures() {
 }
 
 #[test]
-fn focus_paginated_errors_match_live_error_summaries() {
+fn focus_paginated_errors_keep_full_output_like_live_errors() {
     for diagnostic in [
         "rg: missing.rs: No such file or directory (os error 2)",
         "错误: 文件不存在，无法读取文件",
     ] {
-        let output = format!("\n\u{1b}[31m{diagnostic}\u{1b}[0m\nDETAILED_OUTPUT");
+        let output = format!(
+            "total 40\nFilesystem Size Used Avail\n{}\u{1b}[31m{diagnostic}\u{1b}[0m\nFINAL_OUTPUT",
+            "DETAILED_OUTPUT\n".repeat(100)
+        );
         let item: ThreadItem = serde_json::from_value(serde_json::json!({
             "type": "commandExecution", "id": "fixture", "command": "rg needle missing.rs",
             "cwd": "/tmp", "processId": null, "status": "failed", "source": "unifiedExecStartup",
@@ -146,19 +149,26 @@ fn focus_paginated_errors_match_live_error_summaries() {
         );
         for width in [40, 80, 120] {
             let focused = paginated.display_lines_for_mode(width, HistoryRenderMode::Focus);
-            assert_eq!(
-                focused,
-                live.display_lines_for_mode(width, HistoryRenderMode::Focus)
-            );
-            assert_eq!(focused.len(), 1);
-            assert!(focused[0].width() <= usize::from(width));
-            assert!(
-                focused[0]
-                    .to_string()
-                    .starts_with("• exec_command: failed (exit 2): ")
-            );
+            assert_eq!(focused, paginated.display_lines(width));
+            let live_focused = live.display_lines_for_mode(width, HistoryRenderMode::Focus);
+            assert_eq!(live_focused, live.transcript_lines(width));
+            for lines in [&focused, &live_focused] {
+                let text = lines
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                assert!(text.contains("total 40"));
+                assert_eq!(text.matches("DETAILED_OUTPUT").count(), 100);
+                assert!(text.contains("FINAL_OUTPUT"));
+                assert!(!text.contains("… +"));
+            }
             if width == 120 {
-                assert!(focused[0].to_string().contains(diagnostic));
+                assert!(
+                    focused
+                        .iter()
+                        .any(|line| line.to_string().contains(diagnostic))
+                );
             }
         }
         assert_eq!(paginated.raw_lines(), original);

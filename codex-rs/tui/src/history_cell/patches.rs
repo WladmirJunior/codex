@@ -79,8 +79,6 @@ pub(crate) fn new_patch_apply_failure(stderr: String) -> impl HistoryCell {
         tool: "apply_patch",
         status: "failed",
         artifact: None,
-        exit_code: None,
-        error_detail: None,
     }
 }
 
@@ -101,8 +99,6 @@ pub(crate) fn new_view_image_tool_call(path: LegacyAppPathString, cwd: &Path) ->
         full: PlainHistoryCell { lines },
         tool: "view_image",
         status: "completed",
-        exit_code: None,
-        error_detail: None,
     }
 }
 
@@ -131,8 +127,6 @@ pub(crate) fn new_image_generation_call(
         artifact: has_saved_path.then(|| lines.last().cloned()).flatten(),
         full: PlainHistoryCell { lines },
         tool: "image_generation",
-        exit_code: None,
-        error_detail: None,
         status: if status == "failed" {
             "failed"
         } else {

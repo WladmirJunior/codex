@@ -182,19 +182,17 @@ fn focus_exec_completed_failed_cancelled_and_running() {
             .map(ToString::to_string)
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(!focused.contains("DETAILED_"));
-        let expected = match exit_code {
-            Some(0) => "",
-            Some(_) => "• exec_command: failed (exit 7): Permission denied",
-            None => "• exec_command: interrupted",
-        };
-        assert_eq!(focused, expected);
         let full = cell
             .transcript_lines(/*width*/ 80)
             .iter()
             .map(ToString::to_string)
             .collect::<Vec<_>>()
             .join("\n");
+        match exit_code {
+            Some(0) => assert_eq!(focused, ""),
+            Some(_) => assert_eq!(focused, full),
+            None => assert_eq!(focused, "• exec_command: interrupted"),
+        }
         assert!(full.contains("DETAILED_COMMAND"));
         if exit_code.is_some() {
             assert!(full.contains("DETAILED_OUTPUT"));
@@ -205,10 +203,10 @@ fn focus_exec_completed_failed_cancelled_and_running() {
 }
 
 #[test]
-fn focus_exec_failure_includes_one_bounded_error_line() {
-    let error = "rg:\tmissing.rs: No such file or directory (os error 2)";
+fn focus_exec_failure_keeps_full_output_after_stdout_headers() {
+    let error = "rg: missing.rs: No such file or directory (os error 2)";
     let output = format!(
-        "\n  \n\u{1b}[31m{error}\u{1b}[0m\n{}",
+        "total 40\nFilesystem Size Used Avail\ne7420c63012fc19c8f6957f271dc56f49a788557\n{}\u{1b}[31m{error}\u{1b}[0m\nFINAL_OUTPUT",
         "DETAILED_OUTPUT\n".repeat(100)
     );
     let mut cell = crate::exec_cell::new_active_exec_command(
@@ -226,15 +224,19 @@ fn focus_exec_failure_includes_one_bounded_error_line() {
     );
     for width in [120, 80, 40] {
         let lines = cell.display_lines_for_mode(width, HistoryRenderMode::Focus);
-        assert_eq!(lines.len(), 1);
-        assert!(lines[0].width() <= usize::from(width));
-        assert!(lines[0].to_string().contains("failed (exit 2): rg:"));
-        assert!(!lines[0].to_string().contains("DETAILED_OUTPUT"));
+        assert_eq!(lines, cell.transcript_lines(width));
+        let text = lines
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(text.contains("total 40"));
+        assert!(text.contains("Filesystem Size Used Avail"));
+        assert_eq!(text.matches("DETAILED_OUTPUT").count(), 100);
+        assert!(text.contains("FINAL_OUTPUT"));
+        assert!(!text.contains("… +"));
         if width == 120 {
-            assert_eq!(
-                lines[0].to_string(),
-                "• exec_command: failed (exit 2): rg: missing.rs: No such file or directory (os error 2)"
-            );
+            assert!(text.contains(error));
         }
     }
     assert!(
@@ -245,7 +247,7 @@ fn focus_exec_failure_includes_one_bounded_error_line() {
 }
 
 #[test]
-fn focus_unicode_exec_error_keeps_identity_and_truncates_with_ellipsis() {
+fn focus_unicode_exec_error_wraps_without_truncation() {
     let mut cell = crate::exec_cell::new_active_exec_command(
         "fixture-call".into(),
         vec!["rg".into(), "missing.rs".into()],
@@ -261,12 +263,52 @@ fn focus_unicode_exec_error_keeps_identity_and_truncates_with_ellipsis() {
     );
     for width in [40, 80] {
         let lines = cell.display_lines_for_mode(width, HistoryRenderMode::Focus);
-        assert_eq!(lines.len(), 1);
-        assert!(lines[0].width() <= usize::from(width));
-        let text = lines[0].to_string();
-        assert!(text.starts_with("• exec_command: failed (exit 2): 错误:"));
-        assert!(text.ends_with('…'));
+        assert_eq!(lines, cell.transcript_lines(width));
+        let text = lines.iter().map(ToString::to_string).collect::<String>();
+        assert_eq!(text.matches("错误").count(), 30);
+        assert!(!text.contains('…'));
     }
+}
+
+#[test]
+fn focus_mixed_exec_group_keeps_only_failed_call_details() {
+    let mut cell = crate::exec_cell::new_active_exec_command(
+        "success".into(),
+        vec!["cat".into(), "SUCCESS_COMMAND".into()],
+        Vec::new(),
+        codex_app_server_protocol::CommandExecutionSource::Agent,
+        /*interaction_input*/ None,
+        /*animations_enabled*/ false,
+    );
+    cell.complete_call(
+        "success",
+        CommandOutput::new(/*exit_code*/ 0, "SUCCESS_OUTPUT".into()),
+        Duration::ZERO,
+    );
+    let mut failed = crate::exec_cell::new_active_exec_command(
+        "failed".into(),
+        vec!["cat".into(), "FAILED_COMMAND".into()],
+        Vec::new(),
+        codex_app_server_protocol::CommandExecutionSource::Agent,
+        /*interaction_input*/ None,
+        /*animations_enabled*/ false,
+    );
+    failed.complete_call(
+        "failed",
+        CommandOutput::new(/*exit_code*/ 2, "total 40\nFAILED_OUTPUT".into()),
+        Duration::ZERO,
+    );
+    let expected = failed.transcript_lines(/*width*/ 80);
+    cell.calls.extend(failed.calls);
+    assert_eq!(
+        cell.display_lines_for_mode(/*width*/ 80, HistoryRenderMode::Focus),
+        expected
+    );
+    assert!(
+        cell.raw_lines()
+            .iter()
+            .any(|line| line.to_string().contains("SUCCESS_OUTPUT"))
+    );
 }
 
 #[test]
