@@ -1667,6 +1667,12 @@ impl ChatWidget {
         if let Some(controller) = self.plan_stream_controller.as_mut() {
             controller.set_render_mode(render_mode);
         }
+        if render_mode == HistoryRenderMode::Focus && self.bottom_pane.is_task_running() {
+            self.bottom_pane.ensure_status_indicator();
+        }
+        if self.unified_exec_wait_streak.is_some() {
+            self.restore_reasoning_status_header();
+        }
         self.refresh_status_surfaces();
     }
 

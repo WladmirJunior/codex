@@ -406,6 +406,10 @@ impl AgentMessageCell {
 }
 
 impl HistoryCell for AgentMessageCell {
+    fn focus_hyperlink_lines(&self, _width: u16) -> Vec<HyperlinkLine> {
+        Vec::new()
+    }
+
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         visible_lines(self.display_hyperlink_lines(width))
     }
@@ -461,6 +465,7 @@ impl HistoryCell for AgentMessageCell {
 /// because resolving their local file links depends on filesystem state that can change later.
 #[derive(Debug)]
 pub(crate) struct AgentMarkdownCell {
+    phase: Option<codex_protocol::models::MessagePhase>,
     markdown_source: String,
     cwd: PathBuf,
     inline_visualization_context: Option<crate::inline_visualization::InlineVisualizationContext>,
@@ -495,6 +500,7 @@ impl AgentMarkdownCell {
                 .then(MarkdownRenderCache::default);
         Self {
             markdown_source,
+            phase: None,
             cwd: cwd.to_path_buf(),
             inline_visualization_context,
             rendered_lines,
@@ -510,6 +516,14 @@ impl AgentMarkdownCell {
         );
         cell.spoken_artifacts = true;
         cell
+    }
+
+    pub(crate) fn with_phase(
+        mut self,
+        phase: Option<codex_protocol::models::MessagePhase>,
+    ) -> Self {
+        self.phase = phase;
+        self
     }
 }
 
@@ -529,6 +543,14 @@ fn normalize_whitespace_only_hyperlink_lines(mut lines: Vec<HyperlinkLine>) -> V
 }
 
 impl HistoryCell for AgentMarkdownCell {
+    fn focus_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        if self.phase == Some(codex_protocol::models::MessagePhase::Commentary) {
+            Vec::new()
+        } else {
+            self.display_hyperlink_lines(width)
+        }
+    }
+
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         visible_lines(self.display_hyperlink_lines(width))
     }
@@ -612,6 +634,10 @@ impl StreamingAgentTailCell {
 }
 
 impl HistoryCell for StreamingAgentTailCell {
+    fn focus_hyperlink_lines(&self, _width: u16) -> Vec<HyperlinkLine> {
+        Vec::new()
+    }
+
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         visible_lines(self.display_hyperlink_lines(width))
     }

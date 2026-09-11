@@ -292,7 +292,7 @@ impl McpToolCallCell {
 impl HistoryCell for McpToolCallCell {
     fn focus_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
         let status = match self.success() {
-            None => return self.display_hyperlink_lines(width),
+            None => return Vec::new(),
             Some(true) => "completed",
             Some(false) if matches!(&self.result, Some(Err(error)) if error == "interrupted") => {
                 "interrupted"

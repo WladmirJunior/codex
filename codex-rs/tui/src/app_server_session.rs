@@ -3,6 +3,10 @@
 //! This module owns the typed JSON-RPC calls needed by the TUI and keeps
 //! request/response plumbing out of `App` and `ChatWidget`.
 
+mod focus_policy;
+#[cfg(test)]
+#[path = "app_server_session/focus_policy_tests.rs"]
+mod focus_policy_tests;
 mod fs;
 mod history;
 mod models;
@@ -1328,6 +1332,7 @@ impl AppServerSession {
         collaboration_mode: Option<codex_protocol::config_types::CollaborationMode>,
         personality: Option<codex_protocol::config_types::Personality>,
         output_schema: Option<serde_json::Value>,
+        focus_mode: bool,
     ) -> Result<TurnStartResponse> {
         let request_id = self.next_request_id();
         let (sandbox_policy, permissions) =
@@ -1342,7 +1347,7 @@ impl AppServerSession {
                     input: items,
                     tool_output: None,
                     responsesapi_client_metadata: None,
-                    additional_context: None,
+                    additional_context: Some(focus_policy::context(focus_mode)),
                     environments: None,
                     cwd: Some(cwd),
                     runtime_workspace_roots: Some(workspace_roots.to_vec()),
@@ -1398,6 +1403,7 @@ impl AppServerSession {
         turn_id: String,
         client_user_message_id: String,
         items: Vec<UserInput>,
+        focus_mode: bool,
     ) -> std::result::Result<TurnSteerResponse, TypedRequestError> {
         let request_id = self.next_request_id();
         self.client
@@ -1408,7 +1414,7 @@ impl AppServerSession {
                     client_user_message_id: Some(client_user_message_id),
                     input: items,
                     responsesapi_client_metadata: None,
-                    additional_context: None,
+                    additional_context: Some(focus_policy::context(focus_mode)),
                     expected_turn_id: turn_id,
                 },
             })

@@ -127,14 +127,17 @@ pub(crate) fn thread_items_to_transcript_cells(
                     remote_image_urls: item.image_urls(),
                 }));
             }
-            ThreadItem::AgentMessage { text, .. } => {
+            ThreadItem::AgentMessage { text, phase, .. } => {
                 let parsed = parse_assistant_markdown(&text, cwd.as_path());
                 if !parsed.visible_markdown.trim().is_empty() {
-                    cells.push(Arc::new(AgentMarkdownCell::new_with_inline_visualizations(
-                        parsed.visible_markdown,
-                        cwd.as_path(),
-                        inline_visualization_context.clone(),
-                    )));
+                    cells.push(Arc::new(
+                        AgentMarkdownCell::new_with_inline_visualizations(
+                            parsed.visible_markdown,
+                            cwd.as_path(),
+                            inline_visualization_context.clone(),
+                        )
+                        .with_phase(phase),
+                    ));
                 }
             }
             ThreadItem::FunctionCallOutput {
@@ -313,7 +316,57 @@ fn fallback_transcript_cell(item: &ThreadItem) -> Option<Box<dyn HistoryCell>> {
         return None;
     }
     let full = PlainHistoryCell::new(lines);
-    if let ThreadItem::CommandExecution { source, status, .. } = item
+    use codex_app_server_protocol::CollabAgentStatus;
+    use codex_app_server_protocol::CollabAgentToolCallStatus;
+    use codex_app_server_protocol::PatchApplyStatus;
+    use codex_app_server_protocol::SubAgentActivityKind;
+    let hidden_tool = match item {
+        ThreadItem::FileChange {
+            status: PatchApplyStatus::Completed,
+            ..
+        } => Some("apply_patch"),
+        ThreadItem::WebSearch(_) => Some("web_search"),
+        ThreadItem::SubAgentActivity {
+            kind:
+                SubAgentActivityKind::Started
+                | SubAgentActivityKind::Interacted
+                | SubAgentActivityKind::Completed,
+            ..
+        } => Some("subagent"),
+        ThreadItem::CollabAgentToolCall {
+            status: CollabAgentToolCallStatus::InProgress | CollabAgentToolCallStatus::Completed,
+            agents_states,
+            ..
+        } if !agents_states.values().any(|state| {
+            matches!(
+                state.status,
+                CollabAgentStatus::Errored
+                    | CollabAgentStatus::Interrupted
+                    | CollabAgentStatus::NotFound
+            )
+        }) =>
+        {
+            Some("subagent")
+        }
+        _ => None,
+    };
+    if let Some(tool) = hidden_tool {
+        return Some(Box::new(crate::history_cell::FocusToolResultCell {
+            full,
+            tool,
+            status: "completed",
+            artifact: None,
+            exit_code: None,
+            error_detail: None,
+        }));
+    }
+    if let ThreadItem::CommandExecution {
+        source,
+        status,
+        exit_code,
+        aggregated_output,
+        ..
+    } = item
         && *source != codex_app_server_protocol::CommandExecutionSource::UserShell
         && *status != codex_app_server_protocol::CommandExecutionStatus::InProgress
     {
@@ -334,6 +387,12 @@ fn fallback_transcript_cell(item: &ThreadItem) -> Option<Box<dyn HistoryCell>> {
                 Status::InProgress => "running",
             },
             artifact: None,
+            exit_code: *exit_code,
+            error_detail: if *status == Status::Failed {
+                aggregated_output.clone()
+            } else {
+                None
+            },
         }));
     }
     Some(Box::new(full))

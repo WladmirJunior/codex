@@ -499,7 +499,7 @@ async fn transcript_completion_waits_for_normal_agent_stream_consolidation() {
         }
     }
 
-    chat.finalize_completed_assistant_message(Some("normal typed output"));
+    chat.finalize_completed_assistant_message(Some("normal typed output"), /*phase*/ None);
     chat.note_stream_consolidation_completed();
     chat.flush_realtime_transcript_history();
 
@@ -542,7 +542,7 @@ async fn transcript_handoff_moves_deferred_repeats_and_partial_once() {
     assert_eq!(cells.len(), super::super::MAX_PENDING_TRANSCRIPT_CELLS + 1);
     assert!(chat.take_realtime_transcript_cells_for_replay().is_empty());
     chat.restore_realtime_transcript_cells(cells);
-    chat.finalize_completed_assistant_message(Some("ordinary stream"));
+    chat.finalize_completed_assistant_message(Some("ordinary stream"), /*phase*/ None);
     chat.note_stream_consolidation_completed();
     chat.flush_realtime_transcript_history();
 

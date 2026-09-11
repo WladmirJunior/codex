@@ -4,8 +4,10 @@
 //! picker entries, and the fast-switch keyboard shortcuts. Higher-level coordination, such as
 //! deciding which thread becomes active or when a thread closes, stays in [`crate::app::App`].
 
+use crate::history_cell::HistoryCell;
 use crate::history_cell::PlainHistoryCell;
 use crate::render::line_utils::prefix_lines;
+use crate::terminal_hyperlinks::HyperlinkLine;
 use crate::text_formatting::truncate_text;
 use codex_app_server_protocol::CollabAgentState;
 use codex_app_server_protocol::CollabAgentStatus;
@@ -29,6 +31,30 @@ use std::collections::HashSet;
 const COLLAB_PROMPT_PREVIEW_GRAPHEMES: usize = 160;
 const COLLAB_AGENT_ERROR_PREVIEW_GRAPHEMES: usize = 160;
 const COLLAB_AGENT_RESPONSE_PREVIEW_GRAPHEMES: usize = 240;
+
+#[derive(Debug)]
+pub(crate) struct CollabHistoryCell {
+    full: PlainHistoryCell,
+    requires_attention: bool,
+}
+
+impl HistoryCell for CollabHistoryCell {
+    fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
+        self.full.display_lines(width)
+    }
+
+    fn raw_lines(&self) -> Vec<Line<'static>> {
+        self.full.raw_lines()
+    }
+
+    fn focus_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        if self.requires_attention {
+            self.full.display_hyperlink_lines(width)
+        } else {
+            Vec::new()
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AgentPickerThreadEntry {
@@ -204,7 +230,7 @@ pub(crate) fn tool_call_history_cell(
     item: &ThreadItem,
     cached_spawn_request: Option<&SpawnRequestSummary>,
     mut agent_metadata: impl FnMut(ThreadId) -> AgentMetadata,
-) -> Option<PlainHistoryCell> {
+) -> Option<CollabHistoryCell> {
     let ThreadItem::CollabAgentToolCall {
         tool,
         status,
@@ -281,6 +307,20 @@ pub(crate) fn tool_call_history_cell(
                 .map(|receiver_thread_id| close_end(receiver_thread_id, &mut agent_metadata))
         }
     }
+    .map(|full| CollabHistoryCell {
+        full,
+        requires_attention: matches!(
+            status,
+            CollabAgentToolCallStatus::Failed | CollabAgentToolCallStatus::Interrupted
+        ) || agents_states.values().any(|state| {
+            matches!(
+                state.status,
+                CollabAgentStatus::Errored
+                    | CollabAgentStatus::Interrupted
+                    | CollabAgentStatus::NotFound
+            )
+        }),
+    })
 }
 
 pub(crate) fn sub_agent_activity_display(item: &ThreadItem) -> Option<SubAgentActivityDisplay> {
@@ -305,17 +345,17 @@ pub(crate) fn sub_agent_activity_display(item: &ThreadItem) -> Option<SubAgentAc
     })
 }
 
-pub(crate) fn sub_agent_activity_history_cell(item: &ThreadItem) -> Option<PlainHistoryCell> {
+pub(crate) fn sub_agent_activity_history_cell(item: &ThreadItem) -> Option<CollabHistoryCell> {
     let ThreadItem::SubAgentActivity {
         kind, agent_path, ..
     } = item
     else {
         return None;
     };
-    Some(collab_event(
-        sub_agent_activity_title(*kind, agent_path),
-        Vec::new(),
-    ))
+    Some(CollabHistoryCell {
+        full: collab_event(sub_agent_activity_title(*kind, agent_path), Vec::new()),
+        requires_attention: matches!(kind, SubAgentActivityKind::Interrupted),
+    })
 }
 
 pub(crate) fn sub_agent_activity_summary(kind: SubAgentActivityKind, agent_path: &str) -> String {
@@ -979,7 +1019,7 @@ mod tests {
         }
     }
 
-    fn cell_to_text(cell: &PlainHistoryCell) -> String {
+    fn cell_to_text(cell: &impl HistoryCell) -> String {
         cell.display_lines(/*width*/ 200)
             .iter()
             .map(line_to_text)

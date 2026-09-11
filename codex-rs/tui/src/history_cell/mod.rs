@@ -124,6 +124,7 @@ pub(crate) use approvals::*;
 pub(crate) use base::*;
 pub(crate) use exec::*;
 pub(crate) use focus::FocusToolResultCell;
+pub(crate) use focus::focus_tool_failure_summary;
 pub(crate) use focus::focus_tool_summary;
 pub(crate) use hook_cell::HookCell;
 pub(crate) use hook_cell::new_active_hook_cell;

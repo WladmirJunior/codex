@@ -101,7 +101,7 @@ async fn focus_completed_group_in_active_slot_reflows_and_restores() {
     let before = render_frame(&widget, /*width*/ 80);
     widget.set_focus_mode(/*enabled*/ true);
     let focused = render_frame(&widget, /*width*/ 80);
-    assert!(contains_text(&focused, "shell: completed"));
+    assert!(!contains_text(&focused, "shell: completed"));
     assert!(!contains_text(&focused, "DETAILED_FILE"));
     assert!(focused.area.height < before.area.height);
     widget.set_focus_mode(/*enabled*/ false);

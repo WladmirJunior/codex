@@ -14,10 +14,9 @@ fn focus_completed_mcp_retains_full_transcript() {
         },
         /*animations_enabled*/ false,
     );
-    let original = cell.display_lines(/*width*/ 80);
-    assert_eq!(
-        cell.display_lines_for_mode(/*width*/ 80, HistoryRenderMode::Focus),
-        original
+    assert!(
+        cell.display_lines_for_mode(/*width*/ 80, HistoryRenderMode::Focus)
+            .is_empty()
     );
     cell.complete(
         Duration::from_millis(1),
@@ -29,6 +28,7 @@ fn focus_completed_mcp_retains_full_transcript() {
         }),
     );
     let before = cell.transcript_lines(/*width*/ 80);
+    let raw_before = cell.raw_lines();
     let text = before
         .iter()
         .map(ToString::to_string)
@@ -37,10 +37,7 @@ fn focus_completed_mcp_retains_full_transcript() {
     assert!(text.contains("DETAILED_ARGUMENT"));
     assert!(text.contains("DETAILED_RESULT"));
     let focused = cell.display_lines_for_mode(/*width*/ 80, HistoryRenderMode::Focus);
-    assert_eq!(
-        focused.iter().map(ToString::to_string).collect::<Vec<_>>(),
-        vec!["• fixture.inspect: completed"]
-    );
+    assert!(focused.is_empty());
     insta::assert_snapshot!(
         focused
             .iter()
@@ -49,6 +46,7 @@ fn focus_completed_mcp_retains_full_transcript() {
             .join("\n")
     );
     assert_eq!(cell.transcript_lines(/*width*/ 80), before);
+    assert_eq!(cell.raw_lines(), raw_before);
     assert_eq!(
         cell.display_lines_for_mode(/*width*/ 80, HistoryRenderMode::Rich),
         cell.display_lines(/*width*/ 80)
@@ -168,14 +166,11 @@ fn focus_exec_completed_failed_cancelled_and_running() {
             /*interaction_input*/ None,
             /*animations_enabled*/ false,
         );
-        assert_eq!(
-            cell.focus_hyperlink_lines(/*width*/ 80),
-            cell.display_hyperlink_lines(/*width*/ 80)
-        );
+        assert!(cell.focus_hyperlink_lines(/*width*/ 80).is_empty());
         if let Some(code) = exit_code {
             cell.complete_call(
                 "fixture-call",
-                CommandOutput::new(code, "DETAILED_OUTPUT".into()),
+                CommandOutput::new(code, "\nPermission denied\nDETAILED_OUTPUT".into()),
                 Duration::ZERO,
             );
         } else {
@@ -189,11 +184,11 @@ fn focus_exec_completed_failed_cancelled_and_running() {
             .join("\n");
         assert!(!focused.contains("DETAILED_"));
         let expected = match exit_code {
-            Some(0) => "completed",
-            Some(_) => "failed (exit 7)",
-            None => "interrupted",
+            Some(0) => "",
+            Some(_) => "• exec_command: failed (exit 7): Permission denied",
+            None => "• exec_command: interrupted",
         };
-        assert_eq!(focused, format!("• exec_command: {expected}"));
+        assert_eq!(focused, expected);
         let full = cell
             .transcript_lines(/*width*/ 80)
             .iter()
@@ -204,9 +199,163 @@ fn focus_exec_completed_failed_cancelled_and_running() {
         if exit_code.is_some() {
             assert!(full.contains("DETAILED_OUTPUT"));
         }
-        snapshots.push(focused);
+        snapshots.extend(focused.lines().map(str::to_owned));
     }
     insta::assert_snapshot!(snapshots.join("\n"));
+}
+
+#[test]
+fn focus_exec_failure_includes_one_bounded_error_line() {
+    let error = "rg:\tmissing.rs: No such file or directory (os error 2)";
+    let output = format!(
+        "\n  \n\u{1b}[31m{error}\u{1b}[0m\n{}",
+        "DETAILED_OUTPUT\n".repeat(100)
+    );
+    let mut cell = crate::exec_cell::new_active_exec_command(
+        "fixture-call".into(),
+        vec!["rg".into(), "needle".into(), "missing.rs".into()],
+        Vec::new(),
+        codex_app_server_protocol::CommandExecutionSource::UnifiedExecStartup,
+        /*interaction_input*/ None,
+        /*animations_enabled*/ false,
+    );
+    cell.complete_call(
+        "fixture-call",
+        CommandOutput::new(2, output),
+        Duration::ZERO,
+    );
+    for width in [120, 80, 40] {
+        let lines = cell.display_lines_for_mode(width, HistoryRenderMode::Focus);
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].width() <= usize::from(width));
+        assert!(lines[0].to_string().contains("failed (exit 2): rg:"));
+        assert!(!lines[0].to_string().contains("DETAILED_OUTPUT"));
+        if width == 120 {
+            assert_eq!(
+                lines[0].to_string(),
+                "• exec_command: failed (exit 2): rg: missing.rs: No such file or directory (os error 2)"
+            );
+        }
+    }
+    assert!(
+        cell.raw_lines()
+            .iter()
+            .any(|line| line.to_string().contains("DETAILED_OUTPUT"))
+    );
+}
+
+#[test]
+fn focus_unicode_exec_error_keeps_identity_and_truncates_with_ellipsis() {
+    let mut cell = crate::exec_cell::new_active_exec_command(
+        "fixture-call".into(),
+        vec!["rg".into(), "missing.rs".into()],
+        Vec::new(),
+        codex_app_server_protocol::CommandExecutionSource::UnifiedExecStartup,
+        /*interaction_input*/ None,
+        /*animations_enabled*/ false,
+    );
+    cell.complete_call(
+        "fixture-call",
+        CommandOutput::new(/*exit_code*/ 2, "错误: 文件不存在".repeat(30)),
+        Duration::ZERO,
+    );
+    for width in [40, 80] {
+        let lines = cell.display_lines_for_mode(width, HistoryRenderMode::Focus);
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].width() <= usize::from(width));
+        let text = lines[0].to_string();
+        assert!(text.starts_with("• exec_command: failed (exit 2): 错误:"));
+        assert!(text.ends_with('…'));
+    }
+}
+
+#[test]
+fn focus_keeps_explicit_user_shell_commands_visible() {
+    let mut cell = crate::exec_cell::new_active_exec_command(
+        "user-call".into(),
+        vec!["echo".into(), "USER_COMMAND".into()],
+        Vec::new(),
+        codex_app_server_protocol::CommandExecutionSource::UserShell,
+        /*interaction_input*/ None,
+        /*animations_enabled*/ false,
+    );
+    assert_eq!(
+        cell.focus_hyperlink_lines(/*width*/ 80),
+        cell.display_hyperlink_lines(/*width*/ 80)
+    );
+    cell.complete_call(
+        "user-call",
+        CommandOutput::new(/*exit_code*/ 0, "USER_OUTPUT".into()),
+        Duration::ZERO,
+    );
+    assert_eq!(
+        cell.focus_hyperlink_lines(/*width*/ 80),
+        cell.display_hyperlink_lines(/*width*/ 80)
+    );
+}
+
+#[test]
+fn focus_hides_patch_and_background_interactions_but_retains_details() {
+    let patch = new_patch_event(
+        HashMap::from([(
+            test_path_buf("/tmp/fixture.rs"),
+            FileChange::Add {
+                content: "fixture".into(),
+            },
+        )]),
+        &test_path_buf("/tmp"),
+    );
+    let cells: Vec<Box<dyn HistoryCell>> = vec![
+        Box::new(patch),
+        Box::new(new_unified_exec_interaction(
+            Some("sleep 10".into()),
+            String::new(),
+        )),
+        Box::new(new_unified_exec_interaction(
+            Some("cat".into()),
+            "input".into(),
+        )),
+    ];
+    for cell in cells {
+        let before = cell.display_lines(/*width*/ 80);
+        let raw = cell.raw_lines();
+        assert!(!before.is_empty());
+        assert!(cell.focus_hyperlink_lines(/*width*/ 80).is_empty());
+        assert_eq!(cell.display_lines(/*width*/ 80), before);
+        assert_eq!(cell.raw_lines(), raw);
+    }
+    let failure = new_patch_apply_failure("Permission denied".into());
+    assert!(!failure.focus_hyperlink_lines(/*width*/ 80).is_empty());
+}
+
+#[test]
+fn focus_hides_routine_subagent_activity_but_keeps_interruptions() {
+    use codex_app_server_protocol::SubAgentActivityKind;
+    for kind in [
+        SubAgentActivityKind::Started,
+        SubAgentActivityKind::Interacted,
+        SubAgentActivityKind::Completed,
+        SubAgentActivityKind::Interrupted,
+    ] {
+        let cell = crate::multi_agents::sub_agent_activity_history_cell(
+            &codex_app_server_protocol::ThreadItem::SubAgentActivity {
+                id: "fixture-call".into(),
+                kind,
+                agent_thread_id: "00000000-0000-0000-0000-000000000001".into(),
+                agent_path: "/root/worker".into(),
+            },
+        )
+        .unwrap();
+        let raw = cell.raw_lines();
+        let focused = cell.focus_hyperlink_lines(/*width*/ 80);
+        if kind == SubAgentActivityKind::Interrupted {
+            assert_eq!(focused, cell.display_hyperlink_lines(/*width*/ 80));
+        } else {
+            assert!(focused.is_empty());
+        }
+        assert!(!raw.is_empty());
+        assert_eq!(cell.raw_lines(), raw);
+    }
 }
 
 #[test]
@@ -247,6 +396,7 @@ fn focus_image_artifact_remains_accessible() {
         .join("\n");
     assert!(focused.contains("Saved to:"));
     assert!(focused.contains("generated-image.png"));
+    assert_eq!(focused.lines().count(), 1);
     assert!(!focused.contains("DETAILED_IMAGE_PROMPT"));
     assert!(
         cell.transcript_lines(/*width*/ 80)

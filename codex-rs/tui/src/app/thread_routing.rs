@@ -420,7 +420,7 @@ impl App {
             return;
         }
         self.chat_widget
-            .add_to_history(history_cell::new_patch_event(
+            .add_to_history(history_cell::new_patch_approval_preview(
                 request.changes.clone(),
                 &request.cwd,
             ));
@@ -759,6 +759,7 @@ impl App {
                                 steer_turn_id.clone(),
                                 client_user_message_id.clone(),
                                 items.to_vec(),
+                                self.local_settings.tui.focus_mode,
                             )
                             .await
                         {
@@ -877,6 +878,7 @@ impl App {
                             collaboration_mode.clone(),
                             *personality,
                             final_output_json_schema.clone(),
+                            self.local_settings.tui.focus_mode,
                         )
                         .await?;
                     if self.active_thread_id == Some(thread_id)

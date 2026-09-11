@@ -25,12 +25,13 @@ impl App {
     pub(super) fn handle_consolidate_agent_message(
         &mut self,
         tui: &mut tui::Tui,
-        source: String,
+        message: (String, Option<codex_protocol::models::MessagePhase>),
         cwd: PathBuf,
         inline_visualization_context: Option<InlineVisualizationContext>,
         scrollback_reflow: ConsolidationScrollbackReflow,
         deferred_history_cell: Option<Box<dyn HistoryCell>>,
     ) -> Result<()> {
+        let (source, phase) = message;
         // Some finalize paths must preserve a last provisional stream cell long
         // enough for queue ordering, then fold it into the canonical
         // source-backed cell during consolidation.
@@ -59,7 +60,8 @@ impl App {
                     source,
                     &cwd,
                     inline_visualization_context,
-                ),
+                )
+                .with_phase(phase),
             );
             self.transcript_cells
                 .splice(start..end, std::iter::once(consolidated.clone()));

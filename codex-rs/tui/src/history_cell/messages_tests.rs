@@ -4,6 +4,45 @@ use assert_matches::assert_matches;
 use pretty_assertions::assert_eq;
 
 #[test]
+fn focus_hides_commentary_and_provisional_messages_without_changing_transcript() {
+    use codex_protocol::models::MessagePhase;
+    let commentary = AgentMarkdownCell::new("Checking files".into(), Path::new("/tmp"))
+        .with_phase(Some(MessagePhase::Commentary));
+    let answer = AgentMarkdownCell::new("Fixed the issue".into(), Path::new("/tmp"))
+        .with_phase(Some(MessagePhase::FinalAnswer));
+    let legacy = AgentMarkdownCell::new("Legacy answer".into(), Path::new("/tmp"));
+    let provisional =
+        AgentMessageCell::new(vec!["Checking files".into()], /*is_first_line*/ true);
+    let tail = StreamingAgentTailCell::new(
+        vec![Line::from("Still checking").into()],
+        /*is_first_line*/ true,
+    );
+    let cells: [&dyn HistoryCell; 5] = [&commentary, &answer, &legacy, &provisional, &tail];
+    let full_before = cells
+        .iter()
+        .map(|cell| cell.transcript_hyperlink_lines(80))
+        .collect::<Vec<_>>();
+    let focused = cells
+        .iter()
+        .flat_map(|cell| cell.focus_hyperlink_lines(80))
+        .map(|line| line.line.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    insta::assert_snapshot!(focused, @"
+    • Fixed the issue
+    • Legacy answer
+    ");
+    assert_eq!(
+        full_before,
+        cells
+            .iter()
+            .map(|cell| cell.transcript_hyperlink_lines(80))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(commentary.raw_lines(), vec![Line::from("Checking files")]);
+}
+
+#[test]
 fn sanitizer_borrows_clean_text_and_removes_control_sequences() {
     for (text, expected) in [
         ("clean\ttext\n", "clean\ttext\n"),

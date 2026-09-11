@@ -162,6 +162,39 @@ fn assert_decision(
 }
 
 #[tokio::test]
+async fn inactive_patch_approval_preview_keeps_diff_visible_in_focus() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.chat_widget.set_focus_mode(/*enabled*/ true);
+    app.push_thread_interactive_request(ThreadInteractiveRequest::Approval(
+        ApprovalRequest::ApplyPatch(ApplyPatchApprovalRequest {
+            thread_id: ThreadId::new(),
+            thread_label: Some("worker".into()),
+            id: "approval-fixture".into(),
+            reason: None,
+            changes: expected_changes(),
+            cwd: app.chat_widget.config_ref().cwd.clone(),
+        }),
+    ));
+    let mut preview = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            let full =
+                cell.display_lines_for_mode(80, crate::history_cell::HistoryRenderMode::Rich);
+            let focused =
+                cell.display_lines_for_mode(80, crate::history_cell::HistoryRenderMode::Focus);
+            assert_eq!(focused, full);
+            preview.extend(focused.iter().map(ToString::to_string));
+        }
+    }
+    let preview = preview.join("\n");
+    assert!(preview.contains("alpha"));
+    assert!(preview.contains("beta"));
+    assert!(preview.contains("old"));
+    assert!(preview.contains("new"));
+    assert!(app.chat_widget.has_active_view());
+}
+
+#[tokio::test]
 async fn active_patch_approval_pager_preserves_changes_and_accepts_once() -> Result<()> {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let thread_id = ThreadId::new();

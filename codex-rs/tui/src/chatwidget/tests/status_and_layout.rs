@@ -2372,6 +2372,115 @@ async fn commentary_completion_restores_status_indicator_before_exec_begin() {
 }
 
 #[tokio::test]
+async fn focus_stream_keeps_working_and_consolidates_with_message_phase() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.set_focus_mode(/*enabled*/ true);
+    chat.on_task_started();
+    chat.on_agent_message_delta("Checking files\n".to_string());
+    chat.on_commit_tick();
+    assert!(chat.bottom_pane.status_indicator_visible());
+    for event in std::iter::from_fn(|| rx.try_recv().ok()) {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            assert!(cell.focus_hyperlink_lines(80).is_empty());
+        }
+    }
+    complete_assistant_message(
+        &mut chat,
+        "commentary",
+        "Checking files\n",
+        Some(MessagePhase::Commentary),
+    );
+    assert!(chat.bottom_pane.status_indicator_visible());
+    let phases = std::iter::from_fn(|| rx.try_recv().ok())
+        .filter_map(|event| {
+            if let AppEvent::ConsolidateAgentMessage {
+                phase,
+                scrollback_reflow,
+                ..
+            } = event
+            {
+                assert_eq!(
+                    scrollback_reflow,
+                    crate::app_event::ConsolidationScrollbackReflow::Required
+                );
+                Some(phase)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(phases, vec![Some(MessagePhase::Commentary)]);
+    complete_assistant_message(&mut chat, "final", "Fixed", Some(MessagePhase::FinalAnswer));
+    let phases = std::iter::from_fn(|| rx.try_recv().ok())
+        .filter_map(|event| {
+            if let AppEvent::ConsolidateAgentMessage { phase, .. } = event {
+                Some(phase)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(phases, vec![Some(MessagePhase::FinalAnswer)]);
+}
+
+#[tokio::test]
+async fn enabling_focus_midstream_restores_working_indicator() {
+    let (mut chat, _rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.on_task_started();
+    chat.on_agent_message_delta("Checking files\n".to_string());
+    chat.on_commit_tick();
+    assert!(!chat.bottom_pane.status_indicator_visible());
+    chat.set_focus_mode(/*enabled*/ true);
+    assert!(chat.bottom_pane.status_indicator_visible());
+    chat.on_agent_message_delta("Still checking\n".to_string());
+    chat.on_commit_tick();
+    assert!(chat.bottom_pane.status_indicator_visible());
+    chat.set_raw_output_mode(/*enabled*/ true);
+    chat.on_agent_message_delta("Raw progress\n".to_string());
+    chat.on_commit_tick();
+    assert!(!chat.bottom_pane.status_indicator_visible());
+    chat.set_raw_output_mode(/*enabled*/ false);
+    assert!(chat.bottom_pane.status_indicator_visible());
+    chat.on_agent_message_delta("Focus progress\n".to_string());
+    chat.on_commit_tick();
+    assert!(chat.bottom_pane.status_indicator_visible());
+}
+
+#[tokio::test]
+async fn focus_toggle_projects_existing_background_wait_without_command_details() {
+    let (mut chat, _rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.on_task_started();
+    chat.unified_exec_wait_streak = Some(UnifiedExecWaitStreak::new(
+        "process-1".into(),
+        Some("sleep 10".into()),
+    ));
+    chat.set_focus_mode(/*enabled*/ true);
+    assert_eq!(chat.status_state.current_status.header, "Working");
+    assert_eq!(chat.status_state.current_status.details, None);
+    chat.set_raw_output_mode(/*enabled*/ true);
+    assert_eq!(
+        chat.status_state.current_status.header,
+        "Waiting for background terminal"
+    );
+    assert_eq!(
+        chat.status_state.current_status.details,
+        Some("sleep 10".into())
+    );
+    chat.set_raw_output_mode(/*enabled*/ false);
+    assert_eq!(chat.status_state.current_status.header, "Working");
+    assert_eq!(chat.status_state.current_status.details, None);
+    chat.set_focus_mode(/*enabled*/ false);
+    assert_eq!(
+        chat.status_state.current_status.header,
+        "Waiting for background terminal"
+    );
+    assert_eq!(
+        chat.status_state.current_status.details,
+        Some("sleep 10".into())
+    );
+}
+
+#[tokio::test]
 async fn fast_status_indicator_requires_chatgpt_auth() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
     set_fast_mode_test_catalog(&mut chat);

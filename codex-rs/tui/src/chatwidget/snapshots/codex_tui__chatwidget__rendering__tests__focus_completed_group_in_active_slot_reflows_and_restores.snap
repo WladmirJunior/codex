@@ -3,8 +3,6 @@ source: tui/src/chatwidget/rendering_tests.rs
 expression: "focused.content.chunks(80).map(|row|\nrow.iter().map(ratatui::buffer::Cell::symbol).collect::<String>().trim_end().to_string()).collect::<Vec<_>>().join(\"\\n\")"
 ---
 
-• shell: completed
-
 
 › Ask Codex to do anything
 

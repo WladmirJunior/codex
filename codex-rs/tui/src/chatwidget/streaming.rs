@@ -41,10 +41,23 @@ impl ChatWidget {
 
     pub(super) fn restore_reasoning_status_header(&mut self) {
         if self.safety_buffering_is_waiting()
-            || self.unified_exec_wait_streak.is_some()
             || self.status_state.compaction.is_some()
             || !self.status_state.pending_guardian_review_status.is_empty()
         {
+            return;
+        }
+        if let Some(wait) = &self.unified_exec_wait_streak {
+            let focused = self.history_render_mode() == HistoryRenderMode::Focus;
+            self.set_status(
+                if focused {
+                    "Working".to_string()
+                } else {
+                    "Waiting for background terminal".to_string()
+                },
+                wait.command_display.clone().filter(|_| !focused),
+                StatusDetailsCapitalization::Preserve,
+                /*details_max_lines*/ 1,
+            );
             return;
         }
         self.reasoning_header =
@@ -65,10 +78,14 @@ impl ChatWidget {
     }
 
     pub(super) fn flush_answer_stream_with_separator(&mut self) {
-        self.flush_answer_stream(/*completed_message*/ None);
+        self.flush_answer_stream(/*completed_message*/ None, /*phase*/ None);
     }
 
-    fn flush_answer_stream(&mut self, completed_message: Option<&str>) {
+    fn flush_answer_stream(
+        &mut self,
+        completed_message: Option<&str>,
+        phase: Option<MessagePhase>,
+    ) {
         let had_stream_controller = self.stream_controller.is_some();
         if let Some(mut controller) = self.stream_controller.take() {
             let had_live_tail = controller.has_live_tail();
@@ -81,14 +98,17 @@ impl ChatWidget {
                 // Stream finalization supplies one trailing newline when the last delta omitted it.
                 streamed != completed && streamed.strip_suffix('\n') != Some(completed)
             });
-            let scrollback_reflow = if had_live_tail || completed_message_differs {
+            let scrollback_reflow = if had_live_tail
+                || completed_message_differs
+                || self.history_render_mode() == HistoryRenderMode::Focus
+            {
                 crate::app_event::ConsolidationScrollbackReflow::Required
             } else {
                 crate::app_event::ConsolidationScrollbackReflow::IfResizeReflowRan
             };
             // Match newline-committed streaming behavior: once assistant output is ready to be
             // committed into history, hide the inline status row so transcript content replaces it.
-            if cell.is_some() {
+            if cell.is_some() && self.history_render_mode() != HistoryRenderMode::Focus {
                 self.bottom_pane.hide_status_indicator();
             }
             let deferred_history_cell =
@@ -117,6 +137,7 @@ impl ChatWidget {
                 self.note_stream_consolidation_queued();
                 self.app_event_tx.send(AppEvent::ConsolidateAgentMessage {
                     source,
+                    phase,
                     cwd: self.config.cwd.to_path_buf(),
                     inline_visualization_context,
                     scrollback_reflow,
@@ -169,7 +190,11 @@ impl ChatWidget {
         self.status_state.pending_status_indicator_restore = false;
     }
 
-    pub(super) fn finalize_completed_assistant_message(&mut self, message: Option<&str>) {
+    pub(super) fn finalize_completed_assistant_message(
+        &mut self,
+        message: Option<&str>,
+        phase: Option<MessagePhase>,
+    ) {
         if self.stream_controller.is_none()
             && let Some(message) = message
             && !message.is_empty()
@@ -178,7 +203,7 @@ impl ChatWidget {
         }
         // Item completion is authoritative. Use it for consolidation so any
         // deltas dropped by a saturated transport cannot truncate the transcript.
-        self.flush_answer_stream(message);
+        self.flush_answer_stream(message, phase);
         self.handle_stream_finished();
         self.request_redraw();
     }
@@ -395,7 +420,9 @@ impl ChatWidget {
         if from_replay && self.stream_controller.is_none() && !parsed.visible_markdown.is_empty() {
             self.prepare_assistant_message();
             self.mark_safety_buffering_agent_message_started();
-            self.bottom_pane.hide_status_indicator();
+            if self.history_render_mode() != HistoryRenderMode::Focus {
+                self.bottom_pane.hide_status_indicator();
+            }
             let context = self.thread_id.and_then(|thread_id| {
                 crate::inline_visualization::InlineVisualizationContext::from_config(
                     &self.config,
@@ -407,12 +434,16 @@ impl ChatWidget {
                     parsed.visible_markdown.clone(),
                     self.config.cwd.as_path(),
                     context,
-                ),
+                )
+                .with_phase(item.phase.clone()),
             );
             self.handle_stream_finished();
             self.request_redraw();
         } else {
-            self.finalize_completed_assistant_message(Some(parsed.visible_markdown.as_str()));
+            self.finalize_completed_assistant_message(
+                Some(parsed.visible_markdown.as_str()),
+                item.phase.clone(),
+            );
         }
         if !parsed.visible_markdown.is_empty() {
             self.transcript
@@ -481,7 +512,9 @@ impl ChatWidget {
             now,
         );
         for cell in outcome.cells {
-            self.bottom_pane.hide_status_indicator();
+            if self.history_render_mode() != HistoryRenderMode::Focus {
+                self.bottom_pane.hide_status_indicator();
+            }
             self.add_boxed_history(cell);
         }
         if scope == CommitTickScope::AnyMode || outcome.has_controller {
@@ -582,7 +615,9 @@ impl ChatWidget {
                 return self.clear_active_stream_tail();
             }
 
-            self.bottom_pane.hide_status_indicator();
+            if self.history_render_mode() != HistoryRenderMode::Focus {
+                self.bottom_pane.hide_status_indicator();
+            }
             let cell = history_cell::StreamingAgentTailCell::new(
                 tail_lines,
                 controller.tail_starts_stream(),

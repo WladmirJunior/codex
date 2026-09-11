@@ -185,13 +185,15 @@ fn activity_marker(start_time: Option<Instant>, animations_enabled: bool) -> Spa
 
 impl HistoryCell for ExecCell {
     fn focus_hyperlink_lines(&self, width: u16) -> Vec<crate::terminal_hyperlinks::HyperlinkLine> {
-        if self.is_active()
-            || self
-                .calls
-                .iter()
-                .any(|call| call.source == ExecCommandSource::UserShell)
+        if self
+            .calls
+            .iter()
+            .any(|call| call.source == ExecCommandSource::UserShell)
         {
             return self.display_hyperlink_lines(width);
+        }
+        if self.is_active() {
+            return Vec::new();
         }
         self.calls
             .iter()
@@ -205,9 +207,16 @@ impl HistoryCell for ExecCell {
                 let status = if self.interrupted_calls.contains(&call.call_id) {
                     "interrupted".to_string()
                 } else {
-                    match call.output.as_ref().map(|output| output.exit_code) {
-                        Some(0) => "completed".to_string(),
-                        Some(code) => format!("failed (exit {code})"),
+                    match call.output.as_ref() {
+                        Some(output) if output.exit_code == 0 => "completed".to_string(),
+                        Some(output) => {
+                            return crate::history_cell::focus_tool_failure_summary(
+                                tool,
+                                Some(output.exit_code),
+                                output.lines(),
+                                width,
+                            );
+                        }
                         None => "finished".to_string(),
                     }
                 };

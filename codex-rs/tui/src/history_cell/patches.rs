@@ -7,9 +7,18 @@ use codex_utils_path_uri::LegacyAppPathString;
 pub(crate) struct PatchHistoryCell {
     changes: HashMap<PathBuf, FileChange>,
     cwd: PathBuf,
+    approval_preview: bool,
 }
 
 impl HistoryCell for PatchHistoryCell {
+    fn focus_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
+        if self.approval_preview {
+            self.display_hyperlink_lines(width)
+        } else {
+            Vec::new()
+        }
+    }
+
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         create_diff_summary(&self.changes, &self.cwd, width as usize)
     }
@@ -32,6 +41,17 @@ pub(crate) fn new_patch_event(
     PatchHistoryCell {
         changes,
         cwd: cwd.to_path_buf(),
+        approval_preview: false,
+    }
+}
+
+pub(crate) fn new_patch_approval_preview(
+    changes: HashMap<PathBuf, FileChange>,
+    cwd: &Path,
+) -> PatchHistoryCell {
+    PatchHistoryCell {
+        approval_preview: true,
+        ..new_patch_event(changes, cwd)
     }
 }
 
@@ -59,6 +79,8 @@ pub(crate) fn new_patch_apply_failure(stderr: String) -> impl HistoryCell {
         tool: "apply_patch",
         status: "failed",
         artifact: None,
+        exit_code: None,
+        error_detail: None,
     }
 }
 
@@ -79,6 +101,8 @@ pub(crate) fn new_view_image_tool_call(path: LegacyAppPathString, cwd: &Path) ->
         full: PlainHistoryCell { lines },
         tool: "view_image",
         status: "completed",
+        exit_code: None,
+        error_detail: None,
     }
 }
 
@@ -107,6 +131,8 @@ pub(crate) fn new_image_generation_call(
         artifact: has_saved_path.then(|| lines.last().cloned()).flatten(),
         full: PlainHistoryCell { lines },
         tool: "image_generation",
+        exit_code: None,
+        error_detail: None,
         status: if status == "failed" {
             "failed"
         } else {
