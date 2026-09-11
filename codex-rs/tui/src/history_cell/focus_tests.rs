@@ -189,8 +189,7 @@ fn focus_exec_completed_failed_cancelled_and_running() {
             .collect::<Vec<_>>()
             .join("\n");
         match exit_code {
-            Some(0) => assert_eq!(focused, ""),
-            Some(_) => assert_eq!(focused, full),
+            Some(_) => assert_eq!(focused, ""),
             None => assert_eq!(focused, "• exec_command: interrupted"),
         }
         assert!(full.contains("DETAILED_COMMAND"));
@@ -203,7 +202,7 @@ fn focus_exec_completed_failed_cancelled_and_running() {
 }
 
 #[test]
-fn focus_exec_failure_keeps_full_output_after_stdout_headers() {
+fn focus_exec_failure_hides_output_but_keeps_full_transcript() {
     let error = "rg: missing.rs: No such file or directory (os error 2)";
     let output = format!(
         "total 40\nFilesystem Size Used Avail\ne7420c63012fc19c8f6957f271dc56f49a788557\n{}\u{1b}[31m{error}\u{1b}[0m\nFINAL_OUTPUT",
@@ -224,8 +223,9 @@ fn focus_exec_failure_keeps_full_output_after_stdout_headers() {
     );
     for width in [120, 80, 40] {
         let lines = cell.display_lines_for_mode(width, HistoryRenderMode::Focus);
-        assert_eq!(lines, cell.transcript_lines(width));
-        let text = lines
+        assert_eq!(lines, Vec::<Line<'static>>::new());
+        let text = cell
+            .transcript_lines(width)
             .iter()
             .map(ToString::to_string)
             .collect::<Vec<_>>()
@@ -247,7 +247,7 @@ fn focus_exec_failure_keeps_full_output_after_stdout_headers() {
 }
 
 #[test]
-fn focus_unicode_exec_error_wraps_without_truncation() {
+fn focus_unicode_exec_error_is_preserved_outside_focus() {
     let mut cell = crate::exec_cell::new_active_exec_command(
         "fixture-call".into(),
         vec!["rg".into(), "missing.rs".into()],
@@ -263,15 +263,19 @@ fn focus_unicode_exec_error_wraps_without_truncation() {
     );
     for width in [40, 80] {
         let lines = cell.display_lines_for_mode(width, HistoryRenderMode::Focus);
-        assert_eq!(lines, cell.transcript_lines(width));
-        let text = lines.iter().map(ToString::to_string).collect::<String>();
+        assert_eq!(lines, Vec::<Line<'static>>::new());
+        let text = cell
+            .transcript_lines(width)
+            .iter()
+            .map(ToString::to_string)
+            .collect::<String>();
         assert_eq!(text.matches("错误").count(), 30);
         assert!(!text.contains('…'));
     }
 }
 
 #[test]
-fn focus_mixed_exec_group_keeps_only_failed_call_details() {
+fn focus_mixed_exec_group_hides_completed_calls() {
     let mut cell = crate::exec_cell::new_active_exec_command(
         "success".into(),
         vec!["cat".into(), "SUCCESS_COMMAND".into()],
@@ -298,11 +302,10 @@ fn focus_mixed_exec_group_keeps_only_failed_call_details() {
         CommandOutput::new(/*exit_code*/ 2, "total 40\nFAILED_OUTPUT".into()),
         Duration::ZERO,
     );
-    let expected = failed.transcript_lines(/*width*/ 80);
     cell.calls.extend(failed.calls);
     assert_eq!(
         cell.display_lines_for_mode(/*width*/ 80, HistoryRenderMode::Focus),
-        expected
+        Vec::<Line<'static>>::new()
     );
     assert!(
         cell.raw_lines()

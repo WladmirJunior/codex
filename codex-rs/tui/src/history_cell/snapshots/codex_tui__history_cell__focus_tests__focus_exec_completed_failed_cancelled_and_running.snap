@@ -2,9 +2,4 @@
 source: tui/src/history_cell/focus_tests.rs
 expression: "snapshots.join(\"\\n\")"
 ---
-$ echo DETAILED_COMMAND
-
-Permission denied
-DETAILED_OUTPUT
-✗ (7) • 0ms
 • exec_command: interrupted

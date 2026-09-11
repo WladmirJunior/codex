@@ -12,7 +12,6 @@ use crate::motion::activity_indicator;
 use crate::render::highlight::highlight_bash_to_lines;
 use crate::render::line_utils::prefix_lines;
 use crate::render::line_utils::push_owned_lines;
-use crate::terminal_hyperlinks::plain_hyperlink_lines;
 use crate::ui_consts::TRANSCRIPT_HINT;
 use crate::wrapping::RtOptions;
 use crate::wrapping::adaptive_wrap_line;
@@ -209,10 +208,7 @@ impl HistoryCell for ExecCell {
                     "interrupted".to_string()
                 } else {
                     match call.output.as_ref() {
-                        Some(output) if output.exit_code == 0 => "completed".to_string(),
-                        Some(_) => {
-                            return plain_hyperlink_lines(exec_call_transcript_lines(call, width));
-                        }
+                        Some(_) => "completed".to_string(),
                         None => "finished".to_string(),
                     }
                 };

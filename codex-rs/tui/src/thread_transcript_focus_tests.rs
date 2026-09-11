@@ -117,7 +117,7 @@ fn focus_paginated_tool_activity_is_quiet_and_preserves_failures() {
 }
 
 #[test]
-fn focus_paginated_errors_keep_full_output_like_live_errors() {
+fn focus_paginated_errors_are_quiet_like_live_errors() {
     for diagnostic in [
         "rg: missing.rs: No such file or directory (os error 2)",
         "错误: 文件不存在，无法读取文件",
@@ -149,10 +149,10 @@ fn focus_paginated_errors_keep_full_output_like_live_errors() {
         );
         for width in [40, 80, 120] {
             let focused = paginated.display_lines_for_mode(width, HistoryRenderMode::Focus);
-            assert_eq!(focused, paginated.display_lines(width));
+            assert_eq!(focused, Vec::<Line<'static>>::new());
             let live_focused = live.display_lines_for_mode(width, HistoryRenderMode::Focus);
-            assert_eq!(live_focused, live.transcript_lines(width));
-            for lines in [&focused, &live_focused] {
+            assert_eq!(live_focused, Vec::<Line<'static>>::new());
+            for lines in [paginated.display_lines(width), live.transcript_lines(width)] {
                 let text = lines
                     .iter()
                     .map(ToString::to_string)
@@ -165,7 +165,8 @@ fn focus_paginated_errors_keep_full_output_like_live_errors() {
             }
             if width == 120 {
                 assert!(
-                    focused
+                    paginated
+                        .display_lines(width)
                         .iter()
                         .any(|line| line.to_string().contains(diagnostic))
                 );

@@ -361,7 +361,6 @@ fn fallback_transcript_cell(item: &ThreadItem) -> Option<Box<dyn HistoryCell>> {
     if let ThreadItem::CommandExecution { source, status, .. } = item
         && *source != codex_app_server_protocol::CommandExecutionSource::UserShell
         && *status != codex_app_server_protocol::CommandExecutionStatus::InProgress
-        && *status != codex_app_server_protocol::CommandExecutionStatus::Failed
     {
         use codex_app_server_protocol::CommandExecutionSource as Source;
         use codex_app_server_protocol::CommandExecutionStatus as Status;
@@ -374,8 +373,7 @@ fn fallback_transcript_cell(item: &ThreadItem) -> Option<Box<dyn HistoryCell>> {
                 Source::UnifiedExecInteraction => "write_stdin",
             },
             status: match status {
-                Status::Completed => "completed",
-                Status::Failed => "failed",
+                Status::Completed | Status::Failed => "completed",
                 Status::Declined => "declined",
                 Status::InProgress => "running",
             },
